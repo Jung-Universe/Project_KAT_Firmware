@@ -31,12 +31,88 @@
 // 아두파일럿은 기본 (LOG_DISARMED = 0) 으로 무장 중에만 로그를 쓴다.  전원 인가
 // 부터 남기려고 TDCN_LOG_HZ 가 0 이 아니면 LOG_DISARMED 와 관계없이 무장 해제
 // 중에도 기록한다 (이 기체의 로그 전체가 LOG_DISARMED = 1 처럼 된다).
+//
+// 실시간 송신: TDST / TDTG / TDMX 와 같은 값을 TDCN_LIVE_HZ 주기로 GCS 에도
+// 보낸다 (send_tdcn_live).  비행 중에 TDCN/tdcn_live.py 가 받아 로그 분석과 같은
+// 그림을 그린다.  TDCN_LOG_HZ 와는 따로 켜고 끈다.
 // ===========================================================================
+
+// ---------------------------------------------------------------------------
+/* 실시간 송신.  DEBUG_FLOAT_ARRAY 하나 (name "TDCN", array_id 1) 에 담는다.
+
+   data 순서 (TDCN/tdcn_live.py 의 LAYOUT 과 같아야 한다.  바꾸면 array_id 도 올린다)
+     0~11   TDST  Mode, St, Stp, PN, PE, PD, VN, VE, VD, Roll, Pitch, Yaw
+     12~16  TDTG  Val, PN, PE, PD, Hdg
+     17~25  TDMX  Act, AR, AP, AY, AT, CR, CP, CY, CT
+   단위 / 기준은 로그와 같다 (EKF origin 기준 NED m, deg).  time_usec 은 로그의
+   TimeUS 와 같은 부팅 후 시각이다.
+
+   MAVLink2 는 payload 끝의 0 을 잘라 보내므로 26 개면 한 통에 약 136 byte 다. */
+void ModeTDCN::send_tdcn_live()
+{
+    if (_live_hz <= 0) {
+        return;
+    }
+
+    // 메인 루프를 정수로 나눠 주기를 맞춘다 (Log_Write_TDCN 과 같은 방식)
+    uint16_t div = AP::scheduler().get_loop_rate_hz() / (uint16_t)_live_hz.get();
+    if (div < 1) {
+        div = 1;
+    }
+    if (++_live_count < div) {
+        return;
+    }
+    _live_count = 0;
+
+    const TdcnStatus &s = _status;
+
+    mavlink_debug_float_array_t pkt {};
+    pkt.time_usec = AP_HAL::micros64();
+    pkt.array_id = 1;
+    memcpy(pkt.name, "TDCN", 4);
+
+    float *d = pkt.data;
+    // TDST
+    d[0]  = (float)(uint8_t)copter.flightmode->mode_number();
+    d[1]  = (float)(uint8_t)_state;
+    d[2]  = (float)(uint8_t)scenario_state();
+    d[3]  = (float)(s.pos_neu_cm.x * 0.01);
+    d[4]  = (float)(s.pos_neu_cm.y * 0.01);
+    d[5]  = (float)(-s.pos_neu_cm.z * 0.01);        // up -> down
+    d[6]  = s.vel_neu_cms.x * 0.01f;
+    d[7]  = s.vel_neu_cms.y * 0.01f;
+    d[8]  = -s.vel_neu_cms.z * 0.01f;               // up -> down
+    d[9]  = degrees(s.euler_rad.x);
+    d[10] = degrees(s.euler_rad.y);
+    d[11] = wrap_360(degrees(s.euler_rad.z));
+    // TDTG
+    d[12] = s.target_valid ? 1.0f : 0.0f;
+    d[13] = (float)(s.target_pos_neu_cm.x * 0.01);
+    d[14] = (float)(s.target_pos_neu_cm.y * 0.01);
+    d[15] = (float)(-s.target_pos_neu_cm.z * 0.01); // up -> down
+    d[16] = wrap_360(s.target_heading_deg);
+    // TDMX
+    d[17] = s.claw_active ? 1.0f : 0.0f;
+    d[18] = s.ap_roll;
+    d[19] = s.ap_pitch;
+    d[20] = s.ap_yaw;
+    d[21] = s.ap_throttle;
+    d[22] = s.claw_roll;
+    d[23] = s.claw_pitch;
+    d[24] = s.claw_yaw;
+    d[25] = s.claw_throttle;
+
+    gcs().send_to_active_channels(MAVLINK_MSG_ID_DEBUG_FLOAT_ARRAY, (const char *)&pkt);
+}
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 /* TDCN 로그 기록.  fast task 가 매 루프 부른다 (motors_output 다음) */
 void ModeTDCN::Log_Write_TDCN()
 {
+    // 실시간 송신은 TDCN_LOG_HZ 와 관계없이 먼저
+    send_tdcn_live();
+
 #if HAL_LOGGING_ENABLED
     AP_Logger &logger = AP::logger();
 

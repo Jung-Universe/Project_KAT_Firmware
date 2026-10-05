@@ -2028,6 +2028,10 @@ private:
     // 일찍 리턴하면 "진입" 정보가 사라진다.  그래서 별도 플래그로 들고 있는다.
     bool _takeoff_started;
 
+    // 공중 진입 (예: 6 -> Loiter -> TDCN).  init() 이 세우고 state 5 진입 처리가
+    // 유지 위치를 잡은 뒤 내린다.  이륙 완료 지점 대신 home 위 (0, 0, TKO_ALT), 헤딩 0.
+    bool _air_entry;
+
     // state 2 - 마지막으로 GCS 에 알린 pre-arm 결과.  400Hz 로 같은 내용을
     // 반복해 보내지 않기 위해 결과가 바뀔 때만 알린다.
     bool _prearm_ready;
@@ -2143,11 +2147,19 @@ private:
     // Part 3 로그 (TDIM / TDST / TDTG / TDMX) 의 기록 주기 (Hz).  0 = 기록 안 함.
     AP_Int16 _log_hz;
 
+    // Part 3 실시간 송신 (TDST / TDTG / TDMX 값 -> GCS) 주기 (Hz).  0 = 안 보냄.
+    AP_Int16 _live_hz;
+
     // ----- Part 3. 로그 (TDIM / TDST / TDTG / TDMX)  mode_tdcn_log.cpp -------
     //
     // Log_Write_TDCN() (public) 이 TDCN_LOG_HZ 주기로 전원 인가부터 모드와 관계없이
     // 남긴다.  LOG_DISARMED 와 관계없이 무장 해제 중에도 기록한다.
     uint16_t _log_count;        // 주기 맞추는 루프 카운터
+
+    // 같은 값을 TDCN_LIVE_HZ 주기로 GCS 에 보낸다 (TDCN/tdcn_live.py).
+    // Log_Write_TDCN() 이 맨 앞에서 부른다.
+    void send_tdcn_live();
+    uint16_t _live_count;       // 주기 맞추는 루프 카운터
 };
 #endif
 

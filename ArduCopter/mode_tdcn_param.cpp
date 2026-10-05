@@ -73,6 +73,14 @@ const AP_Param::GroupInfo ModeTDCN::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("LOG_HZ", 7, ModeTDCN, _log_hz, 400),
 
+    // @Param: LIVE_HZ
+    // @DisplayName: TDCN live telemetry rate
+    // @Description: Rate at which the TDST, TDTG and TDMX values are also sent to the GCS as one DEBUG_FLOAT_ARRAY message named TDCN, for TDCN/tdcn_live.py. Sent from power on in every flight mode, independent of TDCN_LOG_HZ. One message is about 136 bytes, so 10 Hz needs about 1.4 kB/s of telemetry bandwidth. 0 turns it off.
+    // @Units: Hz
+    // @Range: 0 50
+    // @User: Advanced
+    AP_GROUPINFO("LIVE_HZ", 8, ModeTDCN, _live_hz, 10),
+
     AP_GROUPEND
 };
 // ---------------------------------------------------------------------------

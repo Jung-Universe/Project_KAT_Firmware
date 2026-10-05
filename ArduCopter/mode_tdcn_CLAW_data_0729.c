@@ -24,8 +24,8 @@ P_CLAW_T CLAW_P = {
     /* Controller_Var.c           Scale                  (            ) */
     /*  ʿ     Rotor_PWM_max           Ͽ        ʿ  */
     3.2,  /* BSC_Scale_Thrust */
-    0.38,   /* BSC_Scale_Roll   */
-    0.32,   /* BSC_Scale_Pitch  */
+    0.25,   /* BSC_Scale_Roll   */
+    0.20,   /* BSC_Scale_Pitch  */
     0.13,   /* BSC_Scale_Yaw    */
 
     /* --- [ ߰ ] Outer Loop Gains --- */

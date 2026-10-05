@@ -12,14 +12,10 @@ volatile uint8_t Arming = 0;
 /* 모드 진입시 1회 실행 */
 bool ModeTDCN::init(bool ignore_checks)
 {
-    // TDCN 은 지상에서만 시작한다.  state 0~3 은 지상 처리만 하므로, 공중에서
-    // 들어오면 아무도 기체를 잡지 않는다.  거부하면 이전 모드가 유지된다.
-    if (!copter.ap.land_complete) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "%s: start on the ground only", name());
-        return false;
-    }
+    // 공중 진입 (예: 6 -> Loiter -> TDCN) 은 state 5 에서 시작한다
+    _air_entry = !copter.ap.land_complete;
 
-    _state = State::NONE;
+    _state = _air_entry ? State::FLIGHT_WAIT : State::NONE;
     _gcs_cmd.pending = false;
     _gcs_cmd.auto_pending = false;
     _auto_step = State::NONE;
@@ -32,7 +28,7 @@ bool ModeTDCN::init(bool ignore_checks)
 
     _prearm_ready = false;
 
-    _state_entered = false;
+    _state_entered = _air_entry;            // 공중이면 state 5 진입 처리를 한 번 돈다
     _state_start_ms = AP_HAL::millis();
 
     _state_done = true;
@@ -51,6 +47,11 @@ bool ModeTDCN::init(bool ignore_checks)
 
     Arming = 1;
 
+    if (_air_entry) {
+        gcs().send_text(MAV_SEVERITY_INFO, "%s: air entry -> state %u", name(),
+                        (unsigned)State::FLIGHT_WAIT);
+    }
+
     return true;
 }
 // ---------------------------------------------------------------------------
@@ -61,7 +62,6 @@ void ModeTDCN::exit()
 {
     Arming = 0;
 
-    // 로그상 TDCN 밖은 전원 인가 직후처럼 0 으로 보이게 한다 (TDST / TDTG / TDMX)
     _state = State::NONE;
     _auto_step = State::NONE;
     _status = TdcnStatus{};
@@ -118,11 +118,9 @@ void ModeTDCN::run()
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-/* 기체 상태 점검.  run() 맨 앞에서 state 와 무관하게 매 루프 부른다 */
+/* 기체 상태 점검 */
 void ModeTDCN::check_vehicle_status()
 {
-    // 무장 시각 추적.  무장은 state 3 / state 4 재무장 / 자동 해제 후 재무장 등
-    // 여러 경로로 걸리므로 여기서 한 번에 잡는다.  state 4 의 이륙 정착 대기가 쓴다.
     const bool armed_now = motors->armed();
     if (armed_now && !_armed_prev) {
         _armed_ms = AP_HAL::millis();
@@ -135,9 +133,6 @@ void ModeTDCN::check_vehicle_status()
 /* GCS 명령 처리 */
 MAV_RESULT ModeTDCN::GCS_command(const mavlink_command_int_t &packet)
 {
-    // GCS_Mavlink.cpp 는 현재 모드와 관계없이 이 함수를 부른다.  TDCN 이 아닐 때
-    // 받아 두면 GCS 는 시나리오가 진행되는 줄 알게 되므로 거부한다.
-    // (재시도해도 소용없으므로 DENIED.  조작자가 모드를 TDCN 으로 되돌려야 한다)
     if (copter.flightmode != this) {
         return MAV_RESULT_DENIED;
     }
@@ -147,17 +142,10 @@ MAV_RESULT ModeTDCN::GCS_command(const mavlink_command_int_t &packet)
     }
     const int32_t state_num = (int32_t)roundf(packet.param1);
 
-    // 아직 반영 안 된 명령이 있으면 그 state 가 곧 현재 state 가 된다.
-    // 순서 / 완료 검사를 그것 기준으로 해야 수신 즉시 반영하던 때와 결과가 같다.
-    // 자동 진행 중이면 그 안의 단계가 현재 state 다.
     const State now_state = scenario_state();
     const State cur_state = _gcs_cmd.pending ? _gcs_cmd.state : now_state;
     const bool  cur_done  = (cur_state == now_state) ? _state_done : false;
 
-    // --- 자동 진행 명령 (12 / 13) ---
-    //   12  state 0~5 에서만 받는다.  6 (추종 비행) 까지 자동으로 진행한다
-    //   13  state 6~10 에서만 받는다.  11 (격납함 닫기) 까지 자동으로 진행한다
-    // 현재 단계가 끝나지 않았어도 받는다 - 기체가 완료를 기다렸다가 넘어간다.
     if (state_num == (int32_t)State::AUTO_TO_TRACKING ||
         state_num == (int32_t)State::AUTO_TO_CLOSE) {
         const State auto_state = (State)state_num;
@@ -179,9 +167,6 @@ MAV_RESULT ModeTDCN::GCS_command(const mavlink_command_int_t &packet)
 
     const State state = (State)state_num;
 
-    // DENIED = 입력 거부.  기체는 하던 일을 계속하고, 조작자가 다시 입력해야 한다.
-    // 현재 단계가 끝나기 전의 다음 번호도 거부한다 (GCS 자동 재시도 없이 입력한
-    // 대로 움직였는지 확인하기 위해 TEMPORARILY_REJECTED 를 쓰지 않는다).
     if (!state_order_ok(cur_state, state)) {
         return MAV_RESULT_DENIED;
     }
@@ -223,7 +208,6 @@ MAV_RESULT ModeTDCN::GCS_command(const mavlink_command_int_t &packet)
                        Location::AltFrame::ABOVE_HOME);
     }
 
-    // 검사 통과 - 보관만 한다.  반영은 run() 의 check_gcs_message() 가 한다.
     _gcs_cmd.state = state;
     if (state == State::TRACKING) {
         _gcs_cmd.target_loc = loc;
@@ -236,7 +220,7 @@ MAV_RESULT ModeTDCN::GCS_command(const mavlink_command_int_t &packet)
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-/* GCS 메시지 점검.  GCS_command() 가 보관한 명령을 반영한다 */
+/* GCS 메시지 점검 */
 void ModeTDCN::check_gcs_message()
 {
     // --- GCS 가 보낸 state 명령 (1~11) ---
@@ -250,8 +234,6 @@ void ModeTDCN::check_gcs_message()
         }
 
         if (is_auto(_state) && next == _auto_step) {
-            // 자동 진행 중 지금 단계와 같은 번호 - 자동 진행을 계속한다
-            // (state 6 이면 위에서 타겟만 갱신했다)
         } else {
             if (is_auto(_state)) {
                 // 자동 진행 중 다른 번호 - 자동 진행을 멈추고 수동으로 넘겨받는다
@@ -263,8 +245,6 @@ void ModeTDCN::check_gcs_message()
     }
 
     // --- GCS 가 보낸 자동 진행 명령 (12 / 13) ---
-    // 지금 실행 중인 단계부터 이어서 진행한다 (그 단계의 진입 처리를 다시 하지
-    // 않는다).  대기 시간은 명령을 받은 순간부터 잰다.
     if (_gcs_cmd.auto_pending) {
         _gcs_cmd.auto_pending = false;
         if (_state != _gcs_cmd.auto_state) {
@@ -280,27 +260,25 @@ void ModeTDCN::check_gcs_message()
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-/* state 전이.  진입 훅을 세우고, 새 state 는 아직 완료되지 않은 것으로 둔다 */
+/* state 전이 */
 void ModeTDCN::change_state(State next)
 {
     if (next == _state) {
-        return;                 // 같은 번호 재전송 (state 6 타겟 갱신 등)
+        return;                
     }
     _state = next;
     _state_entered = true;
     _state_start_ms = AP_HAL::millis();
 
-    // 담당 state_*() 가 자기 조건을 보고 true 로 올릴 때까지 다음으로 못 넘어간다
     _state_done = false;
 }
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-/* 현재 상태 업데이트.  state 별 처리가 끝난 뒤 목표값 / 현재값 / 제어값을 저장한다 */
+/* 현재 상태 업데이트 */
 void ModeTDCN::update_status()
 {
     // --- 목표값: 지금 state 가 쫓는 목표 ---
-    // 지상 처리 (make_safe_ground_handling) 중이면 쫓는 목표가 없다.
     const bool flying = !is_disarmed_or_landed();
     bool valid = false;
     Vector3p target = _hold_pos_neu_cm;
@@ -592,7 +570,7 @@ void ModeTDCN::state_flight_wait()      // 5 비행 대기
         if (!auto_takeoff.get_completion_pos(_hold_pos_neu_cm)) {
             _hold_pos_neu_cm = pos_control->get_pos_desired_cm();
         }
-        
+
         pos_control->set_max_speed_accel_xy(wp_nav->get_default_speed_xy(), wp_nav->get_wp_acceleration());
         pos_control->set_correction_speed_accel_xy(wp_nav->get_default_speed_xy(), wp_nav->get_wp_acceleration());
         pos_control->set_max_speed_accel_z(wp_nav->get_default_speed_down(), wp_nav->get_default_speed_up(), wp_nav->get_accel_z());
@@ -606,6 +584,23 @@ void ModeTDCN::state_flight_wait()      // 5 비행 대기
         }
 
         auto_yaw.set_mode(AutoYaw::Mode::HOLD);
+
+        if (_air_entry) {
+            // 공중 진입: home 바로 위 (0, 0, TKO_ALT), 헤딩 0 - 다시 이륙한 것처럼
+            pos_control->init_xy_controller_stopping_point();
+            pos_control->init_z_controller_stopping_point();
+            _hold_pos_neu_cm = pos_control->get_pos_desired_cm();
+
+            Vector3f home_neu_cm;
+            if (ahrs.get_home().get_vector_from_origin_NEU(home_neu_cm)) {
+                _hold_pos_neu_cm = Vector3p(home_neu_cm.x, home_neu_cm.y,
+                                            home_neu_cm.z + _takeoff_alt);
+            }
+
+            // HOLD 에서 상대각으로 줘야 지금 헤딩부터 기본 선회율로 0 까지 돈다
+            auto_yaw.set_fixed_yaw(wrap_180(-degrees(ahrs.get_yaw())), 0.0f, 0, true);
+            _air_entry = false;
+        }
     }
 
     if (is_disarmed_or_landed()) {

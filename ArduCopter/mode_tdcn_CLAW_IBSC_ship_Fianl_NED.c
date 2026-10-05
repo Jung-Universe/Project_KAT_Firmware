@@ -525,7 +525,7 @@ void CLAW_step(void)
 
     for (i = 0; i < 3; i++) STV_OLD[i] = STV[i];
 
-    CLAW_Y.v_cmd.cmd_height = (real32_T)(Del_Control[0] * CLAW_P.BSC_Scale_Thrust);
+    
 
     /* Sejong: 롤 부호 반전 (1.0 -> -1.0).
        모멘트 명령은 자세 오차를 [줄이는] 방향이어야 하므로 corr(cmd, z1) 이
@@ -542,6 +542,7 @@ void CLAW_step(void)
        BSC_B_mat 의 롤 행 부호일 수 있으나 그 파라미터는 건드리지 않기로 해
        여기서 맞춘다.  원본:
            CLAW_Y.v_cmd.cmd_roll = (real32_T)(Del_Control[1] * CLAW_P.BSC_Scale_Roll * 1.0); */
+    CLAW_Y.v_cmd.cmd_height = (real32_T)(Del_Control[0] * CLAW_P.BSC_Scale_Thrust);
     CLAW_Y.v_cmd.cmd_roll = (real32_T)(Del_Control[1] * CLAW_P.BSC_Scale_Roll * -1.0);
     CLAW_Y.v_cmd.cmd_pitch = (real32_T)(Del_Control[2] * CLAW_P.BSC_Scale_Pitch * -1.0);
     CLAW_Y.v_cmd.cmd_yaw = (real32_T)(Del_Control[3] * CLAW_P.BSC_Scale_Yaw * 1.0);
@@ -558,10 +559,9 @@ void CLAW_step(void)
     if (CLAW_Y.v_cmd.cmd_height > 1.0F) CLAW_Y.v_cmd.cmd_height = 1.0F;
     else if (CLAW_Y.v_cmd.cmd_height < -1.0F) CLAW_Y.v_cmd.cmd_height = -1.0F;
 
-    Prev_CTRL[0] = (double)(CLAW_Y.v_cmd.cmd_height / CLAW_P.BSC_Scale_Thrust);
+    Prev_CTRL[0] = (double)((CLAW_Y.v_cmd.cmd_height / CLAW_P.BSC_Scale_Thrust));
     /* Sejong: 위 cmd_roll 의 부호 반전에 맞춰 나눗셈 인자도 -1.0 으로 바꿨다.
        Prev_CTRL 은 v_cmd 에서 Del_Control 을 역산하는 자리라 배율이 같아야 한다
-       (피치는 원래부터 -1.0 로 되어 있다 - 아래 줄 참고).
        원본: Prev_CTRL[1] = (double)(CLAW_Y.v_cmd.cmd_roll / (CLAW_P.BSC_Scale_Roll * 1.0)); */
     Prev_CTRL[1] = (double)(CLAW_Y.v_cmd.cmd_roll / (CLAW_P.BSC_Scale_Roll * -1.0));
     Prev_CTRL[2] = (double)(CLAW_Y.v_cmd.cmd_pitch / (CLAW_P.BSC_Scale_Pitch * -1.0));
