@@ -51,9 +51,10 @@ ACK
 하므로, 거부되면 조작자가 다시 입력한다.  --scenario 자동 재생만 사람 대신
 재시도한다.
 
-기체는 TDCN 모드에 들어올 때마다 state 0 (NONE) 부터 시작한다.  이 스크립트는
-HEARTBEAT 로 모드를 보다가 TDCN 에 들어오거나 벗어나면 알리고, 자기가 기억하는
-state 도 0 으로 되돌린다.
+기체는 지상에서 TDCN 모드에 들어오면 state 0 (NONE) 부터, 공중에서 들어오면
+(예: 6 -> Loiter -> TDCN) state 5 부터 시작한다.  이 스크립트는 HEARTBEAT 로 모드를
+보다가 TDCN 에 들어오거나 벗어나면 알리고, 자기가 기억하는 state 도 0 으로
+되돌린다.  공중 진입이면 기체의 "TDCN: air entry -> state 5" 알림을 보고 5 로 맞춘다.
 
 사용 예
 -------
@@ -99,6 +100,10 @@ MAV_CMD_USER_1 = 31010
 
 # ArduCopter 의 TDCN 비행모드 번호 (HEARTBEAT.custom_mode)
 TDCN_MODE = 29
+
+# 공중 진입 알림 ("TDCN: air entry -> state N") 을 받은 뒤 이 시간 안에 오는
+# TDCN 진입 HEARTBEAT 는 같은 진입으로 본다 (s).  HEARTBEAT 는 1 Hz 다.
+AIR_ENTRY_S = 3.0
 
 # COMMAND_INT 의 frame.  1 = 좌표가 home 기준 NEU 라는 선언.
 # 최종 결과물에서 위경도로 보낼 때는 3 (MAV_FRAME_GLOBAL_RELATIVE_ALT) 을 쓴다.
@@ -239,6 +244,9 @@ class TdcnGCS:
         # 기체는 모드 진입 시 NONE(0) 에서 시작한다.
         self.state: int = 0
 
+        # 마지막 공중 진입 알림 시각 (time.monotonic).  _on_vehicle_mode 참고.
+        self._air_entry_s: float = -1e9
+
         # 기체의 현재 비행모드 (HEARTBEAT.custom_mode).  None = 아직 모름.
         # DENIED 의 이유를 추정하고, TDCN 진입/이탈을 알리는 데 쓴다.
         self.vehicle_mode: int | None = None
@@ -284,10 +292,17 @@ class TdcnGCS:
 
           TDCN: auto state N          N 으로 넘어갔다
           TDCN: auto done (state N)   자동 진행이 N 에서 끝났다
+          TDCN: air entry -> state N  공중에서 TDCN 에 들어와 N 에서 시작했다
         """
         m = re.search(r"auto (?:state (\d+)|done \(state (\d+)\))", text)
         if m:
             self.state = int(m.group(1) or m.group(2))
+        m = re.search(r"air entry -> state (\d+)", text)
+        if m:
+            # 이 알림과 모드 진입 HEARTBEAT 중 어느 쪽이 먼저 올지 모르므로,
+            # _on_vehicle_mode 가 state 를 0 으로 덮지 않게 시각을 남긴다
+            self.state = int(m.group(1))
+            self._air_entry_s = time.monotonic()
 
     def _on_vehicle_mode(self, mode: int) -> None:
         """비행모드 변화를 알린다.  TDCN 에 들어오거나 벗어나면 state 를 0 으로."""
@@ -301,13 +316,19 @@ class TdcnGCS:
                       f"TDCN 으로 바꾸기 전까지 입력은 거부됩니다.")
             return
         if mode == TDCN_MODE:
+            if time.monotonic() - self._air_entry_s < AIR_ENTRY_S:
+                # 공중 진입 알림을 방금 받았다 - 기체는 그 state 에서 시작했다
+                print(f"\n  [기체] TDCN 모드 공중 진입 — state {self.state} 에서 시작, "
+                      f"state {self.state + 1} 부터 입력하세요")
+                return
             print("\n  [기체] TDCN 모드 진입 — state 1 부터 입력하세요")
         elif prev == TDCN_MODE:
             print(f"\n  [기체] TDCN 모드를 벗어났습니다 (현재 모드 {mode}).  "
-                  f"다시 들어오면 state 1 부터 시작합니다")
+                  f"다시 들어오면 지상은 state 1, 공중은 state 5 부터 시작합니다")
         else:
             return
-        # 기체는 TDCN 에 들어올 때마다 state 0 (NONE) 부터 시작한다
+        # 기체는 지상에서 TDCN 에 들어오면 state 0 (NONE) 부터 시작한다.
+        # 공중 진입은 _on_tdcn_text 가 알림으로 state 를 맞춘다.
         self.state = 0
 
     @property
