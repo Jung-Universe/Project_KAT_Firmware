@@ -32,6 +32,10 @@ python tdcn_gcs_NEU.py              # 14551
 python tdcn_live.py                 # 14560
 python tdcn_log_analyze.py          # 인자 없으면 ../logs 의 최신 .BIN
 
+# SITL Loiter 전환하기 전 입력
+rc 1 1500; rc 2 1500; rc 3 1500; rc 4 1500; mode loiter
+
+
 [-----------------------------------------------REAL----------------------------------------------]
 # 설치 (GCS 노트북에 처음 한 번)
 #   Python 3.10 이상: python.org 설치 파일로 설치하고 "Add python.exe to PATH" 를 체크한다
