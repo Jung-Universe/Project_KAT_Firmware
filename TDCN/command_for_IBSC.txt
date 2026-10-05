@@ -1,0 +1,54 @@
+[---------------------------------------------Version---------------------------------------------]
+Ubuntu    : 22.04.5 LTS
+Python    : 3.10.12
+Gazebo    : Harmonic (gz-sim 8.15.0) + ardupilot_gazebo plugin (082a0fe, 2026-04-02)
+Mission   : Mission Planner 1.3.83 (2024-09-10), Mono 6.8.0.105
+Python 패키지 : pymavlink 2.4.49, MAVProxy 1.8.74, numpy 1.26.4 (<2 고정), matplotlib 3.5.1,
+               pyqtgraph 0.14.0, PyQt5 5.15.11
+설치 안내   : ../SITL_SETUP.md (빈 Ubuntu 22.04 에서 처음부터)
+
+[-----------------------------------------------SITL----------------------------------------------]
+# 빌드 (configure 는 처음 한 번만, 코드를 고친 뒤에는 ./waf copter 만)
+cd ~/Desktop/KAT_v4/ardupilot
+./waf configure --board sitl
+./waf copter
+
+# Gazebo (먼저 띄운다)
+__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia \
+  gz sim -v4 -r iris_runway.sdf
+
+# SITL (14550 은 sim_vehicle 이 기본으로 열어 주므로 빼고, 14551 / 14560 만 추가)
+cd ~/Desktop/KAT_v4/ardupilot
+./Tools/autotest/sim_vehicle.py -v ArduCopter -f gazebo-iris --model JSON --console \
+  --out=udp:127.0.0.1:14551 --out=udp:127.0.0.1:14560
+#   파라미터를 기본값으로 되돌릴 때만 맨 뒤에 -w
+
+# Mission Planner (연결: UDP, 포트 14550)
+mono ~/MissionPlanner/MissionPlanner.exe
+
+# Python
+cd ~/Desktop/KAT_v4/ardupilot/TDCN
+python tdcn_gcs_NEU.py              # 14551
+python tdcn_live.py                 # 14560
+python tdcn_log_analyze.py          # 인자 없으면 ../logs 의 최신 .BIN
+
+[-----------------------------------------------REAL----------------------------------------------]
+# 설치 (GCS 노트북에 처음 한 번)
+#   Python 3.10 이상: python.org 설치 파일로 설치하고 "Add python.exe to PATH" 를 체크한다
+py -m pip install pymavlink MAVProxy wxPython numpy matplotlib pyqtgraph PyQt5
+#   wxPython 은 MAVProxy 의 --console 창에 필요하다
+
+# 텔레메트리 COM 포트 확인 (장치 관리자 → 포트(COM & LPT) 에서 봐도 된다)
+[System.IO.Ports.SerialPort]::GetPortNames()
+
+# MAVProxy (텔레메트리 포트는 MAVProxy 만 연다.  COM5 는 위에서 확인한 번호로)
+py -m MAVProxy.mavproxy --master=COM5 --baudrate 57600 --console --out=udp:127.0.0.1:14550 --out=udp:127.0.0.1:14551 --out=udp:127.0.0.1:14560
+
+# Mission Planner
+#   오른쪽 위 연결 방식을 UDP 로 → CONNECT → 포트 14550.  COM 포트로 직접 연결하지 않는다
+
+# Python (창마다 따로 실행.  TDCN 폴더만 복사해 와도 된다)
+cd $HOME\Desktop\KAT_v4\ardupilot\TDCN
+py tdcn_gcs_NEU.py                                   # 14551
+py tdcn_live.py                                      # 14560
+py tdcn_log_analyze.py $HOME\Downloads\00000012.BIN  # SD 카드에서 받은 로그 경로

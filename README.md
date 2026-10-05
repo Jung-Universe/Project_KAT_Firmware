@@ -5,6 +5,7 @@ ArduPilot 4.6.2 (ArduCopter) 기반 펌웨어.  TDCN 비행모드 (29 번) 와 C
 - **SITL 환경 설정 (Ubuntu 22.04)**: [SITL_SETUP.md](SITL_SETUP.md) — 빈 Ubuntu 에서 위에서부터 따라 하면 된다
 - TDCN 펌웨어: `ArduCopter/mode_tdcn*.cpp`, CLAW 제어기: `ArduCopter/mode_tdcn_CLAW_*`
 - TDCN 스크립트 (GCS 모사, 실시간 그림, 로그 분석): [TDCN/](TDCN/)
+- 실행 명령 모음 (SITL / 실기체 Windows GCS): [TDCN/command_for_IBSC.txt](TDCN/command_for_IBSC.txt)
 
 아래는 ArduPilot 원본 README 다.
 
