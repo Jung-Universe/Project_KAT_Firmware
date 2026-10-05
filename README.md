@@ -310,28 +310,6 @@ python3 tdcn_log_analyze.py
 실기체 (Windows GCS) 명령은 [TDCN/command_for_IBSC.txt](TDCN/command_for_IBSC.txt) 에 있다.
 
 
-## 문제 해결
-
-| 증상 | 원인 / 해결 |
-|---|---|
-| `tdcn_log_analyze.py` 가 `numpy.core.multiarray failed to import` | numpy 가 2.x 로 올라갔다.  `python3 -m pip install --user "numpy<2"` |
-| `param show TDCN_LIVE_HZ` 에 값이 없다 / TDCN 이 이상하다 | 다른 ArduPilot 트리가 돌고 있다.  `./Tools/autotest/sim_vehicle.py` 로 실행했는지, `~/.profile` 의 PATH 를 확인한다 |
-| SITL 이 `No JSON sensor message received` 만 반복한다 | Gazebo 가 안 떠 있거나 일시정지 상태다.  `gz sim` 을 `-r` 로 띄웠는지 확인한다 |
-| Gazebo 에 iris 가 없다 / 플러그인을 못 찾는다 | 3-2 의 환경 변수가 이 터미널에 없다.  새 터미널을 열거나 `source ~/.bashrc` |
-| Mission Planner 가 연결되지 않는다 | 연결 방식 UDP, 포트 14550 인지 확인한다.  SITL 이 먼저 떠 있어야 한다 |
-| 스크립트가 수신 대기만 한다 | SITL 명령에 `--out=udp:127.0.0.1:14551` / `14560` 을 넣었는지 확인한다 |
-| `Address already in use` / 5760 포트 사용 중 | 다른 SITL 이 떠 있다.  끄거나 `-I1` 로 다른 인스턴스 번호를 준다 (포트가 10 씩 밀린다) |
-
-
-## 알려진 문제
-
-- **Gazebo iris 에서 아두파일럿 자체의 roll 이 약 16 Hz 로 진동한다.**  지금까지의
-  TDCN SITL 비행 전부 (`TDCN_CLAW_ON_OFF = 0` 포함) 에서 이륙부터 roll 만 흔들리고
-  pitch 는 깨끗하다.  iris 모델은 roll 관성이 pitch 의 약 절반이고 로터 팔이 옆으로
-  더 길어서, roll / pitch 가 같은 기본 게인이면 roll 쪽 루프 이득이 3 배쯤 크다.
-  CLAW 게인을 판단하기 전에 `ATC_RAT_RLL_*` 를 이 모델에 맞춰야 한다.
-
-
 ## 라이선스
 
 ArduPilot ([github.com/ArduPilot/ardupilot](https://github.com/ArduPilot/ardupilot)) 을
