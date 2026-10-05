@@ -18,7 +18,7 @@ Mission Planner 와 TDCN 파이썬 스크립트 (GCS 모사, 실시간 그림, �
 | 항목 | 버전 |
 |---|---|
 | Ubuntu | 22.04.5 LTS |
-| 펌웨어 | ArduCopter V4.6.2 + TDCN (이 레포 `main`) |
+| 펌웨어 | ArduCopter V4.6.2 + TDCN (이 레포 `tdcn-v4` 브랜치) |
 | Python | 3.10.12 (Ubuntu 기본) |
 | Gazebo | Harmonic (gz-sim 8.15.0) |
 | ardupilot_gazebo 플러그인 | `082a0fe` (2026-04-02) |
