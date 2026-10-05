@@ -252,7 +252,8 @@ python3 tdcn_gcs_NEU.py
 - `12`: state 1 ~ 6 자동 진행, `13`: state 6 ~ 11 자동 진행.
 - 비행 중 Loiter 로 뺐다가 공중에서 다시 `mode 29` 로 들어오면 state 5 부터 시작하고
   home 위 (0, 0, `TDCN_TKO_ALT`), 헤딩 0 으로 돌아간다.  그다음 `6` 부터 입력한다.
-- `TDCN_CLAW_ON_OFF` = 1 이면 state 6 에서 CLAW 가 기체를 몬다 (0 이면 아두파일럿).
+- `TDCN_CLAW_ON_OFF` 는 state 6 에서 CLAW 가 몰 축의 비트마스크다: 1 스로틀, 2 롤, 4 피치, 8 요
+  (더해서 쓴다, 15 = 전부, 0 = 아두파일럿).  CLAW 가 놓은 축은 아두파일럿 제어기가 지금 상태에서 새로 시작한다.
 
 **`tdcn_live.py` — 실시간 그림**
 

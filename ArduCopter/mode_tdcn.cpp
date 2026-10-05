@@ -60,6 +60,11 @@ bool ModeTDCN::init(bool ignore_checks)
 /* 모드 이탈 */
 void ModeTDCN::exit()
 {
+    // CLAW 가 몰던 중에 모드가 바뀌면 다음 모드가 쌓인 적분을 물려받지 않게 한다
+    if (_status.claw_mask != 0 && !is_disarmed_or_landed()) {
+        claw_handback(_status.claw_mask);
+    }
+
     Arming = 0;
 
     _state = State::NONE;
@@ -332,8 +337,14 @@ void ModeTDCN::update_status()
     _status.euler_rad   = Vector3f(ahrs.get_roll(), ahrs.get_pitch(), ahrs.get_yaw());
     _status.gyro_rads   = ahrs.get_gyro();
 
-    // --- 제어값: 5번에서 믹서에 넣을 CLAW 값과 대체 여부 ---
-    _status.claw_active = claw_output_active();
+    // --- 제어값: 5번에서 믹서에 넣을 CLAW 값과 대체할 축 ---
+    const uint8_t mask = claw_output_mask();
+    const uint8_t released = _status.claw_mask & ~mask;     // 지난 루프에 CLAW 가 몰다 놓은 축
+    if (released != 0 && flying) {
+        claw_handback(released);
+    }
+    _status.claw_mask = mask;
+
     if (step == State::TRACKING) {
         _status.claw_roll  = constrain_float(CLAW_Y.v_cmd.cmd_roll,  -1.0f, 1.0f);
         _status.claw_pitch = constrain_float(CLAW_Y.v_cmd.cmd_pitch, -1.0f, 1.0f);
@@ -430,13 +441,46 @@ void ModeTDCN::Update_Info_for_CLAW()
 // ---------------------------------------------------------------------------
 
 
-bool ModeTDCN::claw_output_active() const
+uint8_t ModeTDCN::claw_output_mask() const
 {
-    return _claw_on_off == 1
-           && scenario_state() == State::TRACKING
-           && home_init
-           && motors->armed()
-           && !is_disarmed_or_landed();
+    if (scenario_state() != State::TRACKING || !home_init ||
+        !motors->armed() || is_disarmed_or_landed()) {
+        return 0;
+    }
+    return (uint8_t)_claw_on_off.get() & CLAW_ALL;
+}
+
+void ModeTDCN::claw_handback(uint8_t released)
+{
+    // 스로틀: 고도 제어기 적분이 끝까지 쌓여 있다.  호버 스로틀에서 다시 시작한다
+    // (init_z_controller 는 지금 스로틀로 적분을 잡으므로 먼저 호버로 맞춘다)
+    if (released & CLAW_THR) {
+        attitude_control->set_throttle_out(motors->get_throttle_hover(), true, POSCONTROL_THROTTLE_CUTOFF_FREQ_HZ);
+        pos_control->init_z_controller();
+    }
+
+    // 자세: 목표를 지금 자세로, 각속도 목표 0
+    if (released & (CLAW_ROLL | CLAW_PITCH)) {
+        attitude_control->reset_target_and_rate(true);
+    } else if (released & CLAW_YAW) {
+        attitude_control->reset_yaw_target_and_rate(true);
+    }
+    if (released & CLAW_ROLL) {
+        attitude_control->get_rate_roll_pid().reset_I();
+    }
+    if (released & CLAW_PITCH) {
+        attitude_control->get_rate_pitch_pid().reset_I();
+    }
+    if (released & CLAW_YAW) {
+        attitude_control->get_rate_yaw_pid().reset_I();
+    }
+
+    // 수평: 속도 제어기 적분도 쌓여 있다.  돌고 있는 제어기는 init 이 적분을
+    // 남기므로 따로 지운다
+    if (released & (CLAW_ROLL | CLAW_PITCH)) {
+        pos_control->init_xy_controller();
+        pos_control->get_vel_xy_pid().reset_I();
+    }
 }
 
 void ModeTDCN::output_to_motors()
@@ -446,15 +490,21 @@ void ModeTDCN::output_to_motors()
     _status.ap_yaw      = motors->get_yaw()   + motors->get_yaw_ff();
     _status.ap_throttle = attitude_control->get_throttle_in();
 
-    if (_status.claw_active) {
+    const uint8_t mask = _status.claw_mask;
+    if (mask & CLAW_ROLL) {
         motors->set_roll(_status.claw_roll);
-        motors->set_pitch(_status.claw_pitch);
-        motors->set_yaw(_status.claw_yaw);
-        motors->set_throttle(_status.claw_throttle);
-
         motors->set_roll_ff(0.0f);
+    }
+    if (mask & CLAW_PITCH) {
+        motors->set_pitch(_status.claw_pitch);
         motors->set_pitch_ff(0.0f);
+    }
+    if (mask & CLAW_YAW) {
+        motors->set_yaw(_status.claw_yaw);
         motors->set_yaw_ff(0.0f);
+    }
+    if (mask & CLAW_THR) {
+        motors->set_throttle(_status.claw_throttle);
     }
 
     Mode::output_to_motors();
@@ -660,9 +710,20 @@ void ModeTDCN::state_tracking()         // 6 추종 비행
 
     attitude_control->input_thrust_vector_heading(pos_control->get_thrust_vector(), auto_yaw.get_heading());
 
-    if (claw_output_active()) {
+    // CLAW 가 모는 축은 rate 적분을 비운다.  자세 목표는 3축 모두일 때만 지금
+    // 자세로 맞춘다 (일부만이면 아두파일럿이 모는 축의 목표까지 지워진다)
+    const uint8_t mask = claw_output_mask();
+    if ((mask & CLAW_ATT) == CLAW_ATT) {
         attitude_control->reset_target_and_rate(false);
-        attitude_control->reset_rate_controller_I_terms();
+    }
+    if (mask & CLAW_ROLL) {
+        attitude_control->get_rate_roll_pid().reset_I();
+    }
+    if (mask & CLAW_PITCH) {
+        attitude_control->get_rate_pitch_pid().reset_I();
+    }
+    if (mask & CLAW_YAW) {
+        attitude_control->get_rate_yaw_pid().reset_I();
     }
 }
 

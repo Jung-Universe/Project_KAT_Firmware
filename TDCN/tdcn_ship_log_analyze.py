@@ -32,7 +32,7 @@ v4 의 tdcn_log_analyze.py 와는 보는 것이 다르다.
     TDIM   각속도 — 주 IMU 자이로 (rad/s 를 deg/s 로 바꿔 그린다)
     TDMX   믹서 직전 제어값.  아두파일럿 (AR/AP/AY/AT) 과 CLAW (CR/CP/CY/CT).
            CLAW 는 state 6 에서 늘 계산되지만, 실제로 믹서에 들어간 것은
-           Act = 1 인 구간뿐이다 (그 밖에는 아두파일럿 값이 들어갔다)
+           Act 에 켜진 축뿐이다 (1 스로틀 2 롤 4 피치 8 요, 나머지는 아두파일럿)
     ORGN   EKF origin (Type 0) / home (Type 1).  TDST 를 home 기준으로 옮긴다
     PARM   SR*_POSITION — GLOBAL_POSITION_INT 스트림 주기 (Figure 2)
 
@@ -67,7 +67,7 @@ ORGN 의 lat/lng 는 소수 7자리라 ~1cm 로 양자화돼 있다.  추종 오
 목표는 빨강 굵은 선, 현재는 축마다 다른 색 (North 파랑, East 보라, Up 초록,
 Heading 주황).  Roll / Pitch / Yaw 도 같은 순서로 파랑 / 보라 / 주황이다.
 제어값 (Figure 4) 만 축이 아니라 출처로 색을 나눈다 — 아두파일럿 파랑, CLAW 빨강.
-CLAW 가 믹서를 몬 구간 (TDMX.Act = 1) 이 있으면 시간축 그림에 빨강 음영을 깐다.
+CLAW 가 믹서를 몬 구간 (TDMX.Act ≠ 0, 한 축이라도) 이 있으면 시간축 그림에 빨강 음영을 깐다.
 
 N/E/U 는 모두 m 라서 **같은 폭(span)** 으로 맞춘다.  세 축 중 변화폭이 가장 큰
 것을 기준으로 삼고, 각 축은 자기 데이터의 중앙에 그 폭을 씌운다.  Roll / Pitch,
@@ -578,7 +578,7 @@ def print_summary(path: str, segs: list, seg: int, tgt: dict, cur: dict,
             print(f"    구간 {i}   {a:7.1f} ~ {b:7.1f} s   (--seg {i})")
     print(f"  목표 (state 6 명령) {n}개, 명령 사이 {t_last:.1f} s = {rate:.1f} Hz")
     print(f"  home (origin 기준)  N {off[0]:+.3f}  E {off[1]:+.3f}  U {off[2]:+.3f} m")
-    print(f"  CLAW 구동 (Act = 1)  {act:.1f} s")
+    print(f"  CLAW 구동 (Act ≠ 0)  {act:.1f} s")
     print("-" * 64)
     print(f"  {'축':<12}{'RMS':>10}{'평균':>10}{'최대|오차|':>12}")
     for name, d in (("North (m)", dn), ("East (m)", de), ("Up (m)", du)):

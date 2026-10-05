@@ -23,7 +23,8 @@
 // 에서는 0 이고 (처음 진입 전에는 원래 0, 이탈하면 exit() 가 지운다), 진입하면
 // init() 이 지운 값에서 다시 채워진다.  0 은 원점 / state 0 과도 같으므로 TDCN 이
 // 도는 구간은 Mode 가 29 인 곳으로 가린다.
-// Act 가 1 인 구간만 CLAW 값이 실제로 믹서에 들어간다.
+// CLAW 값은 Act 에 켜진 축만 실제로 믹서에 들어간다 (Act = TDCN_CLAW_ON_OFF 의
+// 비트, state 6 비행 중이 아니면 0.  1 스로틀 2 롤 4 피치 8 요).
 //
 // 위치는 _status 와 같은 EKF origin 기준이고, NEU cm 를 NED m 로 바꿔 남긴다
 // (PSCN / PSCE / PSCD 와 같은 기준이라 겹쳐 볼 수 있다).
@@ -92,7 +93,7 @@ void ModeTDCN::send_tdcn_live()
     d[15] = (float)(-s.target_pos_neu_cm.z * 0.01); // up -> down
     d[16] = wrap_360(s.target_heading_deg);
     // TDMX
-    d[17] = s.claw_active ? 1.0f : 0.0f;
+    d[17] = (float)s.claw_mask;
     d[18] = s.ap_roll;
     d[19] = s.ap_pitch;
     d[20] = s.ap_yaw;
@@ -221,7 +222,7 @@ void ModeTDCN::Log_Write_TDCN()
 // @LoggerMessage: TDMX
 // @Description: TDCN mixer input, ArduPilot vs CLAW
 // @Field: TimeUS: Time since system startup
-// @Field: Act: 1 when the CLAW values replace the ArduPilot values in the mixer
+// @Field: Act: Bitmask of the mixer inputs the CLAW values replace (1 throttle, 2 roll, 4 pitch, 8 yaw), 0 when ArduPilot flies all axes
 // @Field: AR: ArduPilot roll input, rate PID plus feedforward
 // @Field: AP: ArduPilot pitch input, rate PID plus feedforward
 // @Field: AY: ArduPilot yaw input, rate PID plus feedforward
@@ -236,7 +237,7 @@ void ModeTDCN::Log_Write_TDCN()
                           "F-00000000",
                           "QBffffffff",
                           now_us,
-                          (uint8_t)(s.claw_active ? 1 : 0),
+                          s.claw_mask,
                           (double)s.ap_roll,
                           (double)s.ap_pitch,
                           (double)s.ap_yaw,

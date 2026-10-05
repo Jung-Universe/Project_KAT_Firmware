@@ -51,8 +51,9 @@ const AP_Param::GroupInfo ModeTDCN::var_info[] = {
 
     // @Param: CLAW_ON_OFF
     // @DisplayName: TDCN use CLAW control output
-    // @Description: 0 leaves ArduPilot flying the vehicle; CLAW still runs during state 6 but its output is not used. 1 replaces the ArduPilot roll pitch yaw and throttle mixer inputs with the CLAW output during state 6 tracking. Only take off with 1 after the CLAW gains have been verified for this airframe.
-    // @Values: 0:ArduPilot flies,1:CLAW flies
+    // @Description: Bitmask of the mixer inputs that the CLAW output replaces during state 6 tracking; ArduPilot keeps flying the other axes. 0 leaves ArduPilot flying the vehicle; CLAW still runs during state 6 but its output is not used. 15 lets CLAW fly all four axes. When an axis is handed back to ArduPilot (bit cleared in flight, leaving state 6, or a mode change), ArduPilot's controllers for that axis restart from the current state: throttle from hover with a fresh altitude controller, attitude target at the current attitude, rate and horizontal velocity integrators cleared. Only take off with a non-zero value after the CLAW gains have been verified for this airframe.
+    // @Bitmask: 0:Throttle,1:Roll,2:Pitch,3:Yaw
+    // @Values: 0:ArduPilot flies,1:CLAW throttle only,14:CLAW attitude only,15:CLAW flies
     // @User: Advanced
     AP_GROUPINFO("CLAW_ON_OFF", 5, ModeTDCN, _claw_on_off, 0),
 

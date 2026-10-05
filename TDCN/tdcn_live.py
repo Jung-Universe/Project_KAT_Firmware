@@ -146,7 +146,7 @@ def legend_html(lines: list[str]) -> str:
     parts.append(f"<span style='color:{A.C_STATE}'>┆</span> "
                  "단계 전환 (위 숫자 = 단계, 12·13 = 자동 진행 시작)")
     parts.append("<span style='color:#d9d9d9'>■</span> TDCN 밖 (Mode ≠ 29)")
-    parts.append("<span style='color:#f4c7c7'>■</span> CLAW 구동 (Act = 1)")
+    parts.append("<span style='color:#f4c7c7'>■</span> CLAW 구동 (Act ≠ 0)")
     return "&nbsp;&nbsp;&nbsp;&nbsp;".join(parts)
 
 

@@ -1829,8 +1829,8 @@ private:
 #if MODE_TDCN_ENABLED
 /* Sejong */
 // TDCN integrates the externally supplied CLAW controller
-// (mode_tdcn_CLAW_IBSC_ship_Fianl_NED.c).  With TDCN_CLAW_ON_OFF=1 the CLAW
-// output replaces the mixer inputs in state 6.  Implementation: mode_tdcn.cpp
+// (mode_tdcn_CLAW_IBSC_ship_Fianl_NED.c).  TDCN_CLAW_ON_OFF is a bitmask of the
+// mixer inputs the CLAW output replaces in state 6.  Implementation: mode_tdcn.cpp
 // (parameters: mode_tdcn_param.cpp, CLAW gains: mode_tdcn_gain.cpp,
 // logging: mode_tdcn_log.cpp)
 //
@@ -1890,7 +1890,7 @@ public:
     // 인가부터 모드와 관계없이 매 루프 부른다.  그래서 public 이다.
     void Log_Write_TDCN();
 
-    // 믹서 직전 훅.  TDCN_CLAW_ON_OFF 가 1 이면 여기서 아두파일럿이 계산한
+    // 믹서 직전 훅.  TDCN_CLAW_ON_OFF 에 켠 축만 여기서 아두파일럿이 계산한
     // 제어값을 CLAW 값으로 갈아끼운다.  Copter::motors_output() 이 부른다.
     void output_to_motors() override;
 
@@ -2095,9 +2095,23 @@ private:
     // XY = 이륙 시작 위치, Z = TDCN_TKO_ALT.  update_status() 의 목표값이 쓴다.
     Vector3p _takeoff_target_neu_cm;
 
-    // CLAW 출력을 믹서에 넣어도 되는 상태인가.  update_status() 가 판단해
-    // _status.claw_active 에 담는다.
-    bool claw_output_active() const;
+    // TDCN_CLAW_ON_OFF 의 비트.  순서는 CLAW 의 Del_Control[0..3] 과 같다.
+    enum ClawAxis : uint8_t {
+        CLAW_THR   = 1U << 0,           // 1
+        CLAW_ROLL  = 1U << 1,           // 2
+        CLAW_PITCH = 1U << 2,           // 4
+        CLAW_YAW   = 1U << 3,           // 8
+        CLAW_ATT   = CLAW_ROLL | CLAW_PITCH | CLAW_YAW,
+        CLAW_ALL   = CLAW_THR | CLAW_ATT,   // 15
+    };
+
+    // 지금 CLAW 값으로 대체할 축 (ClawAxis 비트).  state 6 비행 중이 아니면 0.
+    // update_status() 가 판단해 _status.claw_mask 에 담는다.
+    uint8_t claw_output_mask() const;
+
+    // CLAW 가 놓은 축의 아두파일럿 제어기를 지금 상태에서 다시 시작시킨다.
+    // CLAW 가 모는 동안 쌓인 적분 / 목표를 버린다.
+    void claw_handback(uint8_t released);
 
     // 현재 상태.  update_status() (run() 4단계) 가 매 루프 채운다.
     // 위치는 모두 EKF origin 기준 NEU (cm) 라 목표값과 현재값을 바로 뺄 수 있다.
@@ -2118,7 +2132,7 @@ private:
         Vector3f gyro_rads;             // body p, q, r
 
         // 제어값 - 믹서 입력 (roll/pitch/yaw -1~1, throttle 0~1)
-        bool  claw_active;              // 5단계에서 CLAW 값으로 대체할 것인가
+        uint8_t claw_mask;              // 5단계에서 CLAW 값으로 대체할 축 (ClawAxis 비트)
         float claw_roll, claw_pitch, claw_yaw, claw_throttle;   // state 6 에서만 유효
         float ap_roll, ap_pitch, ap_yaw, ap_throttle;           // 5단계가 대체 직전에 채운다
     } _status;
@@ -2136,8 +2150,9 @@ private:
     AP_Float _land_alt;         // state 8 착륙 동기 고도 (cm, home 기준 up)
     AP_Float _land_spd;         // state 8 하강 속도 (cm/s)
 
-    // 0 = 아두파일럿이 몬다 (CLAW 는 state 6 에서 계산만 한다)
-    // 1 = state 6 에서 CLAW 의 제어값 4개로 믹서 입력을 대체한다
+    // state 6 에서 CLAW 값으로 대체할 믹서 입력 (ClawAxis 비트를 더한 값)
+    //   0 = 아두파일럿이 몬다 (CLAW 는 state 6 에서 계산만 한다)
+    //   1 = 스로틀  2 = 롤  4 = 피치  8 = 요  15 = 전부
     AP_Int8  _claw_on_off;
 
     // 자동 진행 (GCS 명령 12 / 13) 에서 state 가 완료된 뒤 넘어가기까지 기다리는

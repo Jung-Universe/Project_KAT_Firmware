@@ -13,7 +13,7 @@ TDCN Part 3 로그 (ArduCopter/mode_tdcn_log.cpp) 를 세 장으로 본다.  한
     TDST   Mode (비행 모드), St (TDCN state 0~13), Stp (실제 단계 0~11),
            PN/PE/PD (m), VN/VE/VD (m/s), Roll/Pitch/Yaw (deg)
     TDTG   Val (목표 유무), PN/PE/PD (m), Hdg (deg)
-    TDMX   Act (CLAW 가 믹서를 몰았는가), AR/AP/AY/AT (아두파일럿),
+    TDMX   Act (CLAW 가 몬 축 비트: 1 스로틀 2 롤 4 피치 8 요), AR/AP/AY/AT (아두파일럿),
            CR/CP/CY/CT (CLAW).  roll/pitch/yaw 는 -1~1, throttle 은 0~1
 
     위치는 EKF origin 기준 NED (m) 다.  PSCN / PSCE / PSCD 와 같은 기준이다.
@@ -29,7 +29,7 @@ TDCN Part 3 로그 (ArduCopter/mode_tdcn_log.cpp) 를 세 장으로 본다.  한
     회색 점선     TDCN 단계 전환.  맨 위 축 위의 숫자가 새 단계 (Stp),
                   12 / 13 은 그 자리에서 자동 진행 명령을 받았다는 뜻
     회색 음영     TDCN 밖 (Mode != 29).  펌웨어가 이 구간을 0 으로 남긴다
-    빨강 음영     CLAW 가 믹서를 몬 구간 (Act = 1)
+    빨강 음영     CLAW 가 믹서를 몬 구간 (Act ≠ 0, 한 축이라도)
 
 값은 로그에 남은 그대로 그린다.  예외는 목표 위치 하나다 — Val = 0 (지상 처리
 중, 목표 없음) 인 구간은 펌웨어 주석대로 쓸 수 없는 값이라 비운다.  목표 헤딩도
@@ -315,7 +315,7 @@ def legend_handles(lines: list[str]):
     h.append(Line2D([], [], label="단계 전환 (위 숫자 = 단계, 12·13 = 자동 진행 시작)",
                     **STATE_LINE))
     h.append(Patch(label="TDCN 밖 (Mode ≠ 29)", **SHADE_OUT))
-    h.append(Patch(label="CLAW 구동 (Act = 1)", **SHADE_ACT))
+    h.append(Patch(label="CLAW 구동 (Act ≠ 0)", **SHADE_ACT))
     return h
 
 
@@ -594,7 +594,7 @@ def print_summary(path: str, data: dict, ctx: dict) -> None:
         print(f"    {tt:7.1f} s   St {int(st):2d}  Stp {int(stp):2d}{auto}")
 
     act = sum(b - a for a, b in ctx["act_spans"])
-    print(f"  CLAW 구동 (Act = 1)   {act:.1f} s")
+    print(f"  CLAW 구동 (Act ≠ 0)   {act:.1f} s")
 
     # state 6 추종 오차 — 같은 루프에 기록된 목표와 현재를 뺀다
     g = data.get("TDTG")
