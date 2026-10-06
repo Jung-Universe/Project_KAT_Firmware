@@ -20,7 +20,7 @@ __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia \
 # SITL (14550 은 sim_vehicle 이 기본으로 열어 주므로 빼고, 14551 / 14560 만 추가)
 cd ~/Desktop/KAT_v4/ardupilot
 ./Tools/autotest/sim_vehicle.py -v ArduCopter -f gazebo-iris --model JSON --console \
-  --out=udp:127.0.0.1:14551 --out=udp:127.0.0.1:14560
+  --out=udp:127.0.0.1:14551 --out=udp:127.0.0.1:14560 -w
 #   파라미터를 기본값으로 되돌릴 때만 맨 뒤에 -w
 
 # Mission Planner (연결: UDP, 포트 14550)
