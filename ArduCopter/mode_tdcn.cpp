@@ -345,16 +345,22 @@ void ModeTDCN::update_status()
     }
     _status.claw_mask = mask;
 
+    // 스로틀 바이어스 = IBSC 호버(0.5) - 학습된 호버.  CLAW 가 스로틀을 잡기
+    // 전까지 (state 5 포함) 따라가다 잡는 순간 고정
+    static float thr_bias;
+    if (!(mask & CLAW_THR)) {
+        thr_bias = 0.5f - motors->get_throttle_hover();
+    }
+
     if (step == State::TRACKING) {
         _status.claw_roll  = constrain_float(CLAW_Y.v_cmd.cmd_roll,  -1.0f, 1.0f);
         _status.claw_pitch = constrain_float(CLAW_Y.v_cmd.cmd_pitch, -1.0f, 1.0f);
         _status.claw_yaw   = constrain_float(CLAW_Y.v_cmd.cmd_yaw,   -1.0f, 1.0f);
 
-        // 범위만 맞춘다: -1 ~ +1  ->  0 ~ 1  (호버 보정 없음)
+        // -1 ~ +1  ->  0 ~ 1, 중심(0.5)을 학습된 호버로 옮긴다
         const float ch = constrain_float(CLAW_Y.v_cmd.cmd_height, -1.0f, 1.0f);
-        _status.claw_throttle = constrain_float((ch + 1.0f) * 0.5f, 0.0f, 1.0f);
+        _status.claw_throttle = constrain_float((ch + 1.0f) * 0.5f - thr_bias, 0.0f, 1.0f);
     } else {
-        // CLAW 는 state 6 에서만 돈다.  그 밖에는 CLAW_Y 가 낡은 값이라 남기지 않는다
         _status.claw_roll = _status.claw_pitch = _status.claw_yaw = 0.0f;
         _status.claw_throttle = 0.0f;
     }
